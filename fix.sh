@@ -50,6 +50,12 @@ xmlstarlet ed -L \
 	-u '//_:class[@name="Object"]/_:constructor[@name="new_with_properties"]//_:parameter[@name="values"]/_:array/@c:type' -v "const GValue*" \
 	GObject-2.0.gir
 
+# add missing attributes to resolve type struct for TypePlugin
+xmlstarlet ed -L \
+	-i '//_:interface[@name="TypePlugin" and not(@glib:type-struct)]' -t 'attr' -n 'glib:type-struct' -v 'TypePluginClass' \
+	-i '//_:record[@name="TypePluginClass" and not(@glib:is-gtype-struct-for)]' -t 'attr' -n 'glib:is-gtype-struct-for' -v 'TypePlugin' \
+	GObject-2.0.gir
+
 # fix wrong "full" transfer ownership
 xmlstarlet ed -L \
 	-u '//_:method[@c:identifier="gdk_frame_clock_get_current_timings"]/_:return-value/@transfer-ownership' -v "none" \
@@ -151,6 +157,17 @@ xmlstarlet ed -L \
 	-u '//_:function[@name="x11_get_xatom_name_for_display"]//_:type[@name="xlib.Atom"]/@c:type' -v "gulong" \
 	-u '//_:function[@name="x11_lookup_xdisplay"]//_:type[@name="xlib.Display"]/@c:type' -v "gpointer" \
 	GdkX11-4.0.gir
+
+xmlstarlet ed -L \
+	-u '//_:callback[@name="Win32MessageFilterFunc"]//_:type[@name="win32.MSG"]/@c:type' -v "gpointer" \
+	-u '//_:class[@name="Win32HCursor"]//_:type[@name="win32.HCURSOR"]/@c:type' -v "gssize" \
+	-u '//_:class[@name="Win32Surface"]//_:type[@name="win32.HGDIOBJ"]/@c:type' -v "gssize" \
+	-u '//_:class[@name="Win32Surface"]//_:type[@name="win32.HWND"]/@c:type' -v "gssize" \
+    -u '//_:function[@name="win32_handle_table_lookup"]//_:type[@name="win32.HWND"]/@c:type' -v 'gssize' \
+    -u '//_:function[@name="win32_set_modal_dialog_libgtk_only"]//_:type[@name="win32.HWND"]/@c:type' -v 'gssize' \
+    -u '//_:function[@name="win32_icon_to_pixbuf_libgtk_only"]//_:type[@name="win32.HICON"]/@c:type' -v 'gssize' \
+    -u '//_:function[@name="win32_pixbuf_to_hicon_libgtk_only"]//_:type[@name="win32.HICON"]/@c:type' -v 'gssize' \
+	GdkWin32-4.0.gir
 
 # Fix invalid type for GtkImage and GtkStackSwitcher "icon-size" property
 xmlstarlet ed -L \

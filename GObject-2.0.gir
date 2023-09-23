@@ -394,7 +394,7 @@ g_object_bind_property() and is owned by the binding.</doc>
           </instance-parameter>
         </parameters>
       </method>
-      <property name="flags" version="2.26" writable="1" construct-only="1" transfer-ownership="none" getter="get_flags">
+      <property name="flags" version="2.26" writable="1" construct-only="1" transfer-ownership="none" getter="get_flags" default-value="G_BINDING_DEFAULT">
         <doc xml:space="preserve">Flags to be used to control the #GBinding</doc>
         <type name="BindingFlags"/>
       </property>
@@ -402,7 +402,7 @@ g_object_bind_property() and is owned by the binding.</doc>
         <doc xml:space="preserve">The #GObject that should be used as the source of the binding</doc>
         <type name="Object"/>
       </property>
-      <property name="source-property" version="2.26" writable="1" construct-only="1" transfer-ownership="none" getter="get_source_property">
+      <property name="source-property" version="2.26" writable="1" construct-only="1" transfer-ownership="none" getter="get_source_property" default-value="NULL">
         <doc xml:space="preserve">The name of the property of #GBinding:source that should be used
 as the source of the binding.
 
@@ -414,7 +414,7 @@ best performance.</doc>
         <doc xml:space="preserve">The #GObject that should be used as the target of the binding</doc>
         <type name="Object"/>
       </property>
-      <property name="target-property" version="2.26" writable="1" construct-only="1" transfer-ownership="none" getter="get_target_property">
+      <property name="target-property" version="2.26" writable="1" construct-only="1" transfer-ownership="none" getter="get_target_property" default-value="NULL">
         <doc xml:space="preserve">The name of the property of #GBinding:target that should be used
 as the target of the binding.
 
@@ -2517,7 +2517,7 @@ but used automatically by GLib when specifying a %NULL marshaller.</doc>
 the last parameter.
 
 @destroy_data will be called as a finalize notifier on the #GClosure.</doc>
-        <return-value transfer-ownership="none">
+        <return-value transfer-ownership="full">
           <doc xml:space="preserve">a floating reference to a new #GCClosure</doc>
           <type name="Closure" c:type="GClosure*"/>
         </return-value>
@@ -2583,7 +2583,7 @@ after the object is is freed.</doc>
 the first parameter.
 
 @destroy_data will be called as a finalize notifier on the #GClosure.</doc>
-        <return-value transfer-ownership="none">
+        <return-value transfer-ownership="full">
           <doc xml:space="preserve">a floating reference to a new #GCClosure</doc>
           <type name="Closure" c:type="GClosure*"/>
         </return-value>
@@ -2945,7 +2945,7 @@ MyClosure *my_closure_new (gpointer data)
   return my_closure;
 }
 ]|</doc>
-        <return-value transfer-ownership="none">
+        <return-value transfer-ownership="full">
           <doc xml:space="preserve">a floating reference to a new #GClosure</doc>
           <type name="Closure" c:type="GClosure*"/>
         </return-value>
@@ -3373,12 +3373,16 @@ on closures.</doc>
     <bitfield name="ConnectFlags" c:type="GConnectFlags">
       <doc xml:space="preserve">The connection flags are used to specify the behaviour of a signal's
 connection.</doc>
+      <member name="default" value="0" c:identifier="G_CONNECT_DEFAULT">
+        <doc xml:space="preserve">Default behaviour (no special flags). Since: 2.74</doc>
+      </member>
       <member name="after" value="1" c:identifier="G_CONNECT_AFTER">
-        <doc xml:space="preserve">whether the handler should be called before or after the
- default handler of the signal.</doc>
+        <doc xml:space="preserve">If set, the handler should be called after the
+ default handler of the signal. Normally, the handler is called before
+ the default handler.</doc>
       </member>
       <member name="swapped" value="2" c:identifier="G_CONNECT_SWAPPED">
-        <doc xml:space="preserve">whether the instance and data should be swapped when
+        <doc xml:space="preserve">If set, the instance and data should be swapped when
  calling the handler; see g_signal_connect_swapped() for an example.</doc>
       </member>
     </bitfield>
@@ -3708,14 +3712,49 @@ types, over calling g_boxed_type_register_static() directly. It defines
 a `type_name_get_type()` function which will return the newly defined
 #GType, enabling lazy instantiation.
 
+You might start by putting declarations in a header as follows:
+
 |[&lt;!-- language="C" --&gt;
+#define MY_TYPE_STRUCT my_struct_get_type ()
+GType my_struct_get_type (void) G_GNUC_CONST;
+
+MyStruct *    my_struct_new (void);
+void          my_struct_free (MyStruct *self);
+MyStruct *    my_struct_copy (MyStruct *self);
+]|
+
+And then use this macro and define your implementation in the source file as
+follows:
+
+|[&lt;!-- language="C" --&gt;
+MyStruct *
+my_struct_new (void)
+{
+  // ... your code to allocate a new MyStruct ...
+}
+
+void
+my_struct_free (MyStruct *self)
+{
+  // ... your code to free a MyStruct ...
+}
+
+MyStruct *
+my_struct_copy (MyStruct *self)
+{
+  // ... your code return a newly allocated copy of a MyStruct ...
+}
+
 G_DEFINE_BOXED_TYPE (MyStruct, my_struct, my_struct_copy, my_struct_free)
 
 void
 foo ()
 {
-  GType type = my_struct_get_type ();
+  MyStruct *ms;
+
+  ms = my_struct_new ();
   // ... your code ...
+  my_struct_free (ms);
 }
 ]|</doc>
       <parameters>
@@ -3874,6 +3913,47 @@ gtk_gadget_register_type (GTypeModule *type_module)
         </parameter>
       </parameters>
     </function-macro>
+    <function-macro name="DEFINE_ENUM_TYPE" c:identifier="G_DEFINE_ENUM_TYPE" version="2.74" introspectable="0">
+      <doc xml:space="preserve">A convenience macro for defining enumeration types.
+
+This macro will generate a `*_get_type()` function for the
+given @TypeName, using @type_name as the function prefix.
+
+|[&lt;!-- language="C" --&gt;
+G_DEFINE_ENUM_TYPE (GtkOrientation, gtk_orientation,
+  G_DEFINE_ENUM_VALUE (GTK_ORIENTATION_HORIZONTAL, "horizontal"),
+  G_DEFINE_ENUM_VALUE (GTK_ORIENTATION_VERTICAL, "vertical"))
+]|
+
+For projects that have multiple enumeration types, or enumeration
+types with many values, you should consider using glib-mkenums to
+generate the type function.</doc>
+      <parameters>
+        <parameter name="TypeName">
+          <doc xml:space="preserve">the enumeration type, in `CamelCase`</doc>
+        </parameter>
+        <parameter name="type_name">
+          <doc xml:space="preserve">the enumeration type prefixed, in `snake_case`</doc>
+        </parameter>
+        <parameter name="...">
+          <doc xml:space="preserve">a list of enumeration values, defined using G_DEFINE_ENUM_VALUE()</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="DEFINE_ENUM_VALUE" c:identifier="G_DEFINE_ENUM_VALUE" version="2.74" introspectable="0">
+      <doc xml:space="preserve">Defines an enumeration value, and maps it to a "nickname".
+
+This macro can only be used with G_DEFINE_ENUM_TYPE() and
+G_DEFINE_FLAGS_TYPE().</doc>
+      <parameters>
+        <parameter name="EnumValue">
+          <doc xml:space="preserve">an enumeration value</doc>
+        </parameter>
+        <parameter name="EnumNick">
+          <doc xml:space="preserve">a short string representing the enumeration value</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
     <function-macro name="DEFINE_FINAL_TYPE" c:identifier="G_DEFINE_FINAL_TYPE" version="2.70" introspectable="0">
       <doc xml:space="preserve">A convenience macro for type implementations.
 
@@ -3933,6 +4013,37 @@ See G_DEFINE_TYPE_EXTENDED() for an example.</doc>
         </parameter>
         <parameter name="T_P">
           <doc xml:space="preserve">the #GType of the parent type</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="DEFINE_FLAGS_TYPE" c:identifier="G_DEFINE_FLAGS_TYPE" version="2.74" introspectable="0">
+      <doc xml:space="preserve">A convenience macro for defining flag types.
+
+This macro will generate a `*_get_type()` function for the
+given @TypeName, using @type_name as the function prefix.
+
+|[&lt;!-- language="C" --&gt;
+G_DEFINE_FLAGS_TYPE (GSettingsBindFlags, g_settings_bind_flags,
+  G_DEFINE_ENUM_VALUE (G_SETTINGS_BIND_DEFAULT, "default"),
+  G_DEFINE_ENUM_VALUE (G_SETTINGS_BIND_GET, "get"),
+  G_DEFINE_ENUM_VALUE (G_SETTINGS_BIND_SET, "set"),
+  G_DEFINE_ENUM_VALUE (G_SETTINGS_BIND_NO_SENSITIVITY, "no-sensitivity"),
+  G_DEFINE_ENUM_VALUE (G_SETTINGS_BIND_GET_NO_CHANGES, "get-no-changes"),
+  G_DEFINE_ENUM_VALUE (G_SETTINGS_BIND_INVERT_BOOLEAN, "invert-boolean"))
+]|
+
+For projects that have multiple enumeration types, or enumeration
+types with many values, you should consider using glib-mkenums to
+generate the type function.</doc>
+      <parameters>
+        <parameter name="TypeName">
+          <doc xml:space="preserve">the enumeration type, in `CamelCase`</doc>
+        </parameter>
+        <parameter name="type_name">
+          <doc xml:space="preserve">the enumeration type prefixed, in `snake_case`</doc>
+        </parameter>
+        <parameter name="...">
+          <doc xml:space="preserve">a list of enumeration values, defined using G_DEFINE_ENUM_VALUE()</doc>
         </parameter>
       </parameters>
     </function-macro>
@@ -4825,8 +4936,17 @@ implementation and should never be accessed directly.</doc>
       <field name="flags" readable="0" private="1">
         <type name="gsize" c:type="gsize"/>
       </field>
+      <field name="n_construct_properties" readable="0" private="1">
+        <type name="gsize" c:type="gsize"/>
+      </field>
+      <field name="pspecs" readable="0" private="1">
+        <type name="gpointer" c:type="gpointer"/>
+      </field>
+      <field name="n_pspecs" readable="0" private="1">
+        <type name="gsize" c:type="gsize"/>
+      </field>
       <field name="pdummy" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="6">
+        <array zero-terminated="0" fixed-size="3">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>
@@ -5020,28 +5140,28 @@ by G_ADD_PRIVATE().</doc>
       <constructor name="new" c:identifier="g_object_new" introspectable="0">
         <doc xml:space="preserve">Creates a new instance of a #GObject subtype and sets its properties.
 
-Construction parameters (see #G_PARAM_CONSTRUCT, #G_PARAM_CONSTRUCT_ONLY)
+Construction parameters (see %G_PARAM_CONSTRUCT, %G_PARAM_CONSTRUCT_ONLY)
 which are not explicitly specified are set to their default values. Any
 private data for the object is guaranteed to be initialized with zeros, as
 per g_type_create_instance().
 
 Note that in C, small integer types in variable argument lists are promoted
-up to #gint or #guint as appropriate, and read back accordingly. #gint is 32
-bits on every platform on which GLib is currently supported. This means that
-you can use C expressions of type #gint with g_object_new() and properties of
-type #gint or #guint or smaller. Specifically, you can use integer literals
+up to `gint` or `guint` as appropriate, and read back accordingly. `gint` is
+32 bits on every platform on which GLib is currently supported. This means that
+you can use C expressions of type `gint` with g_object_new() and properties of
+type `gint` or `guint` or smaller. Specifically, you can use integer literals
 with these property types.
 
-When using property types of #gint64 or #guint64, you must ensure that the
+When using property types of `gint64` or `guint64`, you must ensure that the
 value that you provide is 64 bit. This means that you should use a cast or
 make use of the %G_GINT64_CONSTANT or %G_GUINT64_CONSTANT macros.
 
-Similarly, #gfloat is promoted to #gdouble, so you must ensure that the value
-you provide is a #gdouble, even for a property of type #gfloat.
+Similarly, `gfloat` is promoted to `gdouble`, so you must ensure that the value
+you provide is a `gdouble`, even for a property of type `gfloat`.
 
 Since GLib 2.72, all #GObjects are guaranteed to be aligned to at least the
-alignment of the largest basic GLib type (typically this is #guint64 or
-#gdouble). If you need larger alignment for an element in a #GObject, you
+alignment of the largest basic GLib type (typically this is `guint64` or
+`gdouble`). If you need larger alignment for an element in a #GObject, you
 should allocate it on the heap (aligned), or arrange for your #GObject to be
 appropriately padded.</doc>
         <return-value transfer-ownership="full">
@@ -5060,7 +5180,7 @@ appropriately padded.</doc>
           </parameter>
           <parameter name="..." transfer-ownership="none">
             <doc xml:space="preserve">the value of the first property, followed optionally by more
- name/value pairs, followed by %NULL</doc>
+  name/value pairs, followed by %NULL</doc>
             <varargs/>
           </parameter>
         </parameters>
@@ -5068,7 +5188,7 @@ appropriately padded.</doc>
       <constructor name="new_valist" c:identifier="g_object_new_valist" introspectable="0">
         <doc xml:space="preserve">Creates a new instance of a #GObject subtype and sets its properties.
 
-Construction parameters (see #G_PARAM_CONSTRUCT, #G_PARAM_CONSTRUCT_ONLY)
+Construction parameters (see %G_PARAM_CONSTRUCT, %G_PARAM_CONSTRUCT_ONLY)
 which are not explicitly specified are set to their default values.</doc>
         <return-value transfer-ownership="full">
           <doc xml:space="preserve">a new instance of @object_type</doc>
@@ -5128,7 +5248,7 @@ which are not explicitly specified are set to their default values.</doc>
       <constructor name="newv" c:identifier="g_object_newv" deprecated="1" deprecated-version="2.54">
         <doc xml:space="preserve">Creates a new instance of a #GObject subtype and sets its properties.
 
-Construction parameters (see #G_PARAM_CONSTRUCT, #G_PARAM_CONSTRUCT_ONLY)
+Construction parameters (see %G_PARAM_CONSTRUCT, %G_PARAM_CONSTRUCT_ONLY)
 which are not explicitly specified are set to their default values.</doc>
         <doc-deprecated xml:space="preserve">Use g_object_new_with_properties() instead.
 deprecated. See #GParameter for more information.</doc-deprecated>
@@ -5621,8 +5741,8 @@ function pointers.</doc>
 
 The signal specs expected by this function have the form
 "modifier::signal_name", where modifier can be one of the following:
-- signal: equivalent to g_signal_connect_data (..., NULL, 0)
-- object-signal, object_signal: equivalent to g_signal_connect_object (..., 0)
+- signal: equivalent to g_signal_connect_data (..., NULL, G_CONNECT_DEFAULT)
+- object-signal, object_signal: equivalent to g_signal_connect_object (..., G_CONNECT_DEFAULT)
 - swapped-signal, swapped_signal: equivalent to g_signal_connect_data (..., NULL, G_CONNECT_SWAPPED)
 - swapped_object_signal, swapped-object-signal: equivalent to g_signal_connect_object (..., G_CONNECT_SWAPPED)
 - signal_after, signal-after: equivalent to g_signal_connect_data (..., NULL, G_CONNECT_AFTER)
@@ -6030,12 +6150,11 @@ instead, is to store the GParamSpec used with
 g_object_class_install_property() inside a static array, e.g.:
 
 |[&lt;!-- language="C" --&gt;
-  enum
+  typedef enum
   {
-    PROP_0,
-    PROP_FOO,
+    PROP_FOO = 1,
     PROP_LAST
-  };
+  } MyObjectProperty;
 
   static GParamSpec *properties[PROP_LAST];
 
@@ -6045,7 +6164,7 @@ g_object_class_install_property() inside a static array, e.g.:
     properties[PROP_FOO] = g_param_spec_int ("foo", "Foo", "The foo",
                                              0, 100,
                                              50,
-                                             G_PARAM_READWRITE);
+                                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
     g_object_class_install_property (gobject_class,
                                      PROP_FOO,
                                      properties[PROP_FOO]);
@@ -6923,8 +7042,17 @@ my_singleton_constructor (GType                  type,
       <field name="flags" readable="0" private="1">
         <type name="gsize" c:type="gsize"/>
       </field>
+      <field name="n_construct_properties" readable="0" private="1">
+        <type name="gsize" c:type="gsize"/>
+      </field>
+      <field name="pspecs" readable="0" private="1">
+        <type name="gpointer" c:type="gpointer"/>
+      </field>
+      <field name="n_pspecs" readable="0" private="1">
+        <type name="gsize" c:type="gsize"/>
+      </field>
       <field name="pdummy" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="6">
+        <array zero-terminated="0" fixed-size="3">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>
@@ -6965,9 +7093,11 @@ This function should be used if you plan to use a static array of
 class initialization:
 
 |[&lt;!-- language="C" --&gt;
-enum {
-  PROP_0, PROP_FOO, PROP_BAR, N_PROPERTIES
-};
+typedef enum {
+  PROP_FOO = 1,
+  PROP_BAR,
+  N_PROPERTIES
+} MyObjectProperty;
 
 static GParamSpec *obj_properties[N_PROPERTIES] = { NULL, };
 
@@ -6980,17 +7110,17 @@ my_object_class_init (MyObjectClass *klass)
     g_param_spec_int ("foo", "Foo", "Foo",
                       -1, G_MAXINT,
                       0,
-                      G_PARAM_READWRITE);
+                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   obj_properties[PROP_BAR] =
     g_param_spec_string ("bar", "Bar", "Bar",
                          NULL,
-                         G_PARAM_READWRITE);
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   gobject_class-&gt;set_property = my_object_set_property;
   gobject_class-&gt;get_property = my_object_get_property;
   g_object_class_install_properties (gobject_class,
-                                     N_PROPERTIES,
+                                     G_N_ELEMENTS (obj_properties),
                                      obj_properties);
 }
 ]|
@@ -7430,6 +7560,12 @@ a #GParamSpec object.</doc>
     <constant name="PARAM_STATIC_STRINGS" value="224" c:type="G_PARAM_STATIC_STRINGS">
       <doc xml:space="preserve">#GParamFlags value alias for %G_PARAM_STATIC_NAME | %G_PARAM_STATIC_NICK | %G_PARAM_STATIC_BLURB.
 
+It is recommended to use this for all properties by default, as it allows for
+internal performance improvements in GObject.
+
+It is very rare that a property would have a dynamically constructed name,
+nickname or blurb.
+
 Since 2.13.0</doc>
       <type name="gint" c:type="gint"/>
     </constant>
@@ -7574,11 +7710,12 @@ See [canonical parameter names][canonical-parameter-names] for details of
 the rules for @name. Names which violate these rules lead to undefined
 behaviour.
 
-Beyond the name, #GParamSpecs have two more descriptive
-strings associated with them, the @nick, which should be suitable
-for use as a label for the property in a property editor, and the
-@blurb, which should be a somewhat longer description, suitable for
-e.g. a tooltip. The @nick and @blurb should ideally be localized.</doc>
+Beyond the name, #GParamSpecs have two more descriptive strings, the
+@nick and @blurb, which may be used as a localized label and description.
+For GTK and related libraries these are considered deprecated and may be
+omitted, while for other libraries such as GStreamer and its plugins they
+are essential. When in doubt, follow the conventions used in the
+surrounding code and supporting libraries.</doc>
         <return-value transfer-ownership="none">
           <doc xml:space="preserve">(transfer floating): a newly allocated
     #GParamSpec instance, which is initially floating</doc>
@@ -7586,18 +7723,18 @@ e.g. a tooltip. The @nick and @blurb should ideally be localized.</doc>
         </return-value>
         <parameters>
           <parameter name="param_type" transfer-ownership="none">
-            <doc xml:space="preserve">the #GType for the property; must be derived from #G_TYPE_PARAM</doc>
+            <doc xml:space="preserve">the #GType for the property; must be derived from %G_TYPE_PARAM</doc>
             <type name="GType" c:type="GType"/>
           </parameter>
           <parameter name="name" transfer-ownership="none">
             <doc xml:space="preserve">the canonical name of the property</doc>
             <type name="utf8" c:type="const gchar*"/>
           </parameter>
-          <parameter name="nick" transfer-ownership="none">
+          <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve">the nickname of the property</doc>
             <type name="utf8" c:type="const gchar*"/>
           </parameter>
-          <parameter name="blurb" transfer-ownership="none">
+          <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve">a short description of the property</doc>
             <type name="utf8" c:type="const gchar*"/>
           </parameter>
@@ -7633,6 +7770,19 @@ the rules for valid names.</doc>
           <instance-parameter name="pspec" transfer-ownership="none">
             <type name="ParamSpec" c:type="GParamSpec*"/>
           </instance-parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="value_is_valid">
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="pspec" transfer-ownership="none">
+            <type name="ParamSpec" c:type="GParamSpec*"/>
+          </instance-parameter>
+          <parameter name="value" transfer-ownership="none">
+            <type name="Value" c:type="const GValue*"/>
+          </parameter>
         </parameters>
       </virtual-method>
       <virtual-method name="value_set_default">
@@ -8059,8 +8209,23 @@ g_param_type_register_static().</doc>
           </parameters>
         </callback>
       </field>
+      <field name="value_is_valid">
+        <callback name="value_is_valid">
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="pspec" transfer-ownership="none">
+              <type name="ParamSpec" c:type="GParamSpec*"/>
+            </parameter>
+            <parameter name="value" transfer-ownership="none">
+              <type name="Value" c:type="const GValue*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
       <field name="dummy" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="4">
+        <array zero-terminated="0" fixed-size="3">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>
@@ -8254,7 +8419,7 @@ properties.</doc>
         <type name="ParamSpec" c:type="GParamSpec"/>
       </field>
     </class>
-    <record name="ParamSpecPool" c:type="GParamSpecPool" disguised="1">
+    <record name="ParamSpecPool" c:type="GParamSpecPool" disguised="1" opaque="1">
       <doc xml:space="preserve">A #GParamSpecPool maintains a collection of #GParamSpecs which can be
 quickly accessed by owner and name.
 
@@ -8894,6 +9059,33 @@ You cannot connect a signal handler after #GSignalGroup:target has been set.</do
           </parameter>
         </parameters>
       </method>
+      <method name="connect_closure" c:identifier="g_signal_group_connect_closure" version="2.74">
+        <doc xml:space="preserve">Connects @closure to the signal @detailed_signal on #GSignalGroup:target.
+
+You cannot connect a signal handler after #GSignalGroup:target has been set.</doc>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="self" transfer-ownership="none">
+            <doc xml:space="preserve">a #GSignalGroup</doc>
+            <type name="SignalGroup" c:type="GSignalGroup*"/>
+          </instance-parameter>
+          <parameter name="detailed_signal" transfer-ownership="none">
+            <doc xml:space="preserve">a string of the form `signal-name` with optional `::signal-detail`</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="closure" transfer-ownership="none">
+            <doc xml:space="preserve">the closure to connect.</doc>
+            <type name="Closure" c:type="GClosure*"/>
+          </parameter>
+          <parameter name="after" transfer-ownership="none">
+            <doc xml:space="preserve">whether the handler should be called before or after the
+ default handler of the signal.</doc>
+            <type name="gboolean" c:type="gboolean"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="connect_data" c:identifier="g_signal_group_connect_data" version="2.72">
         <doc xml:space="preserve">Connects @c_handler to the signal @detailed_signal
 on the target instance of @self.
@@ -9434,7 +9626,16 @@ derived classes.</doc>
       </parameters>
     </function-macro>
     <function-macro name="TYPE_IS_CLASSED" c:identifier="G_TYPE_IS_CLASSED" introspectable="0">
-      <doc xml:space="preserve">Checks if @type is a classed type.</doc>
+      <doc xml:space="preserve">Checks if @type is a classed type.
+
+A classed type has an associated #GTypeClass which can be derived to store
+class-wide virtual function pointers and data for all instances of the type.
+This allows for subclassing. All #GObjects are classed; none of the scalar
+fundamental types built into GLib are classed.
+
+Interfaces are not classed: while their #GTypeInterface struct could be
+considered similar to #GTypeClass, and classes can derive interfaces,
+#GTypeInterface doesn&#x2019;t allow for subclassing.</doc>
       <parameters>
         <parameter name="type">
           <doc xml:space="preserve">A #GType value</doc>
@@ -9447,6 +9648,15 @@ can be used as the base class of a deep (multi-level) class hierarchy.</doc>
       <parameters>
         <parameter name="type">
           <doc xml:space="preserve">A #GType value</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="TYPE_IS_DEPRECATED" c:identifier="G_TYPE_IS_DEPRECATED" version="2.76" introspectable="0">
+      <doc xml:space="preserve">Checks if @type is deprecated. Instantiating a deprecated type will
+trigger a warning if running with `G_ENABLE_DIAGNOSTIC=1`.</doc>
+      <parameters>
+        <parameter name="type">
+          <doc xml:space="preserve">a #GType value</doc>
         </parameter>
       </parameters>
     </function-macro>
@@ -9935,7 +10145,7 @@ classes are routed through the same #GTypeClassCacheFunc chain.</doc>
       <doc xml:space="preserve">These flags used to be passed to g_type_init_with_debug_flags() which
 is now deprecated.
 
-If you need to enable debugging features, use the GOBJECT_DEBUG
+If you need to enable debugging features, use the `GOBJECT_DEBUG`
 environment variable.</doc>
       <doc-deprecated xml:space="preserve">g_type_init() is now done automatically</doc-deprecated>
       <member name="none" value="0" c:identifier="G_TYPE_DEBUG_NONE">
@@ -9956,6 +10166,9 @@ environment variable.</doc>
     </bitfield>
     <bitfield name="TypeFlags" c:type="GTypeFlags">
       <doc xml:space="preserve">Bit masks used to check or determine characteristics of a type.</doc>
+      <member name="none" value="0" c:identifier="G_TYPE_FLAG_NONE">
+        <doc xml:space="preserve">No special flags. Since: 2.74</doc>
+      </member>
       <member name="abstract" value="16" c:identifier="G_TYPE_FLAG_ABSTRACT">
         <doc xml:space="preserve">Indicates an abstract type. No instances can be
  created for an abstract type</doc>
@@ -9968,6 +10181,11 @@ environment variable.</doc>
       <member name="final" value="64" c:identifier="G_TYPE_FLAG_FINAL">
         <doc xml:space="preserve">Indicates a final type. A final type is a non-derivable
  leaf node in a deep derivable type hierarchy tree. Since: 2.70</doc>
+      </member>
+      <member name="deprecated" value="128" c:identifier="G_TYPE_FLAG_DEPRECATED">
+        <doc xml:space="preserve">The type is deprecated and may be removed in a
+ future version. A warning will be emitted if it is instantiated while
+ running with `G_ENABLE_DIAGNOSTIC=1`. Since 2.76</doc>
       </member>
     </bitfield>
     <bitfield name="TypeFundamentalFlags" c:type="GTypeFundamentalFlags">
@@ -10040,7 +10258,7 @@ across invocation of g_type_register_static().</doc>
         <type name="guint16" c:type="guint16"/>
       </field>
       <field name="n_preallocs" writable="1">
-        <doc xml:space="preserve">Prior to GLib 2.10, it specified the number of pre-allocated (cached) instances to reserve memory for (0 indicates no caching). Since GLib 2.10, it is ignored, since instances are allocated with the [slice allocator][glib-Memory-Slices] now.</doc>
+        <doc xml:space="preserve">Prior to GLib 2.10, it specified the number of pre-allocated (cached) instances to reserve memory for (0 indicates no caching). Since GLib 2.10 this field is ignored.</doc>
         <type name="guint16" c:type="guint16"/>
       </field>
       <field name="instance_init" writable="1">
@@ -10542,7 +10760,7 @@ the @load and @unload functions in #GTypeModuleClass must be implemented.</doc>
         </callback>
       </field>
     </record>
-    <interface name="TypePlugin" c:symbol-prefix="type_plugin" c:type="GTypePlugin" glib:type-name="GTypePlugin" glib:get-type="g_type_plugin_get_type">
+    <interface name="TypePlugin" c:symbol-prefix="type_plugin" c:type="GTypePlugin" glib:type-name="GTypePlugin" glib:get-type="g_type_plugin_get_type" glib:type-struct="TypePluginClass">
       <doc xml:space="preserve">An interface that handles the lifecycle of dynamically loaded types.
 
 The GObject type system supports dynamic loading of types.
@@ -10673,7 +10891,7 @@ the GObject type system itself.</doc>
         </parameters>
       </method>
     </interface>
-    <record name="TypePluginClass" c:type="GTypePluginClass">
+    <record name="TypePluginClass" c:type="GTypePluginClass" glib:is-gtype-struct-for="TypePlugin">
       <doc xml:space="preserve">The #GTypePlugin interface is used by the type system in order to handle
 the lifecycle of dynamically loaded types.</doc>
       <field name="base_iface" readable="0" private="1">
@@ -10795,122 +11013,315 @@ See also: g_type_query()</doc>
         <type name="guint" c:type="guint"/>
       </field>
     </record>
+    <callback name="TypeValueCollectFunc" c:type="GTypeValueCollectFunc" version="2.78">
+      <doc xml:space="preserve">This function is responsible for converting the values collected from
+a variadic argument list into contents suitable for storage in a #GValue.
+
+This function should setup @value similar to #GTypeValueInitFunc; e.g.
+for a string value that does not allow `NULL` pointers, it needs to either
+emit an error, or do an implicit conversion by storing an empty string.
+
+The @value passed in to this function has a zero-filled data array, so
+just like for #GTypeValueInitFunc it is guaranteed to not contain any old
+contents that might need freeing.
+
+The @n_collect_values argument is the string length of the `collect_format`
+field of #GTypeValueTable, and `collect_values` is an array of #GTypeCValue
+with length of @n_collect_values, containing the collected values according
+to `collect_format`.
+
+The @collect_flags argument provided as a hint by the caller. It may
+contain the flag %G_VALUE_NOCOPY_CONTENTS indicating that the collected
+value contents may be considered &#x2018;static&#x2019; for the duration of the @value
+lifetime. Thus an extra copy of the contents stored in @collect_values is
+not required for assignment to @value.
+
+For our above string example, we continue with:
+
+|[&lt;!-- language="C" --&gt;
+if (!collect_values[0].v_pointer)
+  value-&gt;data[0].v_pointer = g_strdup ("");
+else if (collect_flags &amp; G_VALUE_NOCOPY_CONTENTS)
+  {
+    value-&gt;data[0].v_pointer = collect_values[0].v_pointer;
+    // keep a flag for the value_free() implementation to not free this string
+    value-&gt;data[1].v_uint = G_VALUE_NOCOPY_CONTENTS;
+  }
+else
+  value-&gt;data[0].v_pointer = g_strdup (collect_values[0].v_pointer);
+return NULL;
+]|
+
+It should be noted, that it is generally a bad idea to follow the
+%G_VALUE_NOCOPY_CONTENTS hint for reference counted types. Due to
+reentrancy requirements and reference count assertions performed
+by the signal emission code, reference counts should always be
+incremented for reference counted contents stored in the `value-&gt;data`
+array. To deviate from our string example for a moment, and taking
+a look at an exemplary implementation for `GTypeValueTable.collect_value()`
+of `GObject`:
+
+|[&lt;!-- language="C" --&gt;
+GObject *object = G_OBJECT (collect_values[0].v_pointer);
+g_return_val_if_fail (object != NULL,
+   g_strdup_printf ("Object %p passed as invalid NULL pointer", object));
+// never honour G_VALUE_NOCOPY_CONTENTS for ref-counted types
+value-&gt;data[0].v_pointer = g_object_ref (object);
+return NULL;
+]|
+
+The reference count for valid objects is always incremented, regardless
+of `collect_flags`. For invalid objects, the example returns a newly
+allocated string without altering `value`.
+
+Upon success, `collect_value()` needs to return `NULL`. If, however,
+an error condition occurred, `collect_value()` should return a newly
+allocated string containing an error diagnostic.
+
+The calling code makes no assumptions about the `value` contents being
+valid upon error returns, `value` is simply thrown away without further
+freeing. As such, it is a good idea to not allocate `GValue` contents
+prior to returning an error; however, `collect_values()` is not obliged
+to return a correctly setup @value for error returns, simply because
+any non-`NULL` return is considered a fatal programming error, and
+further program behaviour is undefined.</doc>
+      <return-value transfer-ownership="full" nullable="1">
+        <doc xml:space="preserve">`NULL` on success, otherwise a
+  newly allocated error string on failure</doc>
+        <type name="utf8" c:type="gchar*"/>
+      </return-value>
+      <parameters>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve">the value to initialize</doc>
+          <type name="Value" c:type="GValue*"/>
+        </parameter>
+        <parameter name="n_collect_values" transfer-ownership="none">
+          <doc xml:space="preserve">the number of collected values</doc>
+          <type name="guint" c:type="guint"/>
+        </parameter>
+        <parameter name="collect_values" transfer-ownership="none">
+          <doc xml:space="preserve">the collected values</doc>
+          <array length="1" zero-terminated="0" c:type="GTypeCValue*">
+            <type name="TypeCValue" c:type="GTypeCValue"/>
+          </array>
+        </parameter>
+        <parameter name="collect_flags" transfer-ownership="none">
+          <doc xml:space="preserve">optional flags</doc>
+          <type name="guint" c:type="guint"/>
+        </parameter>
+      </parameters>
+    </callback>
+    <callback name="TypeValueCopyFunc" c:type="GTypeValueCopyFunc" version="2.78">
+      <doc xml:space="preserve">Copies the content of a #GValue into another.
+
+The @dest_value is a #GValue with zero-filled data section and @src_value
+is a properly initialized #GValue of same type, or derived type.
+
+The purpose of this function is to copy the contents of @src_value
+into @dest_value in a way, that even after @src_value has been freed, the
+contents of @dest_value remain valid. String type example:
+
+|[&lt;!-- language="C" --&gt;
+dest_value-&gt;data[0].v_pointer = g_strdup (src_value-&gt;data[0].v_pointer);
+]|</doc>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="src_value" transfer-ownership="none">
+          <doc xml:space="preserve">the value to copy</doc>
+          <type name="Value" c:type="const GValue*"/>
+        </parameter>
+        <parameter name="dest_value" direction="out" caller-allocates="1" transfer-ownership="none">
+          <doc xml:space="preserve">the location of the copy</doc>
+          <type name="Value" c:type="GValue*"/>
+        </parameter>
+      </parameters>
+    </callback>
+    <callback name="TypeValueFreeFunc" c:type="GTypeValueFreeFunc" version="2.78">
+      <doc xml:space="preserve">Frees any old contents that might be left in the `value-&gt;data` array of
+the given value.
+
+No resources may remain allocated through the #GValue contents after this
+function returns. E.g. for our above string type:
+
+|[&lt;!-- language="C" --&gt;
+// only free strings without a specific flag for static storage
+if (!(value-&gt;data[1].v_uint &amp; G_VALUE_NOCOPY_CONTENTS))
+  g_free (value-&gt;data[0].v_pointer);
+]|</doc>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve">the value to free</doc>
+          <type name="Value" c:type="GValue*"/>
+        </parameter>
+      </parameters>
+    </callback>
+    <callback name="TypeValueInitFunc" c:type="GTypeValueInitFunc" version="2.78">
+      <doc xml:space="preserve">Initializes the value contents by setting the fields of the `value-&gt;data`
+array.
+
+The data array of the #GValue passed into this function was zero-filled
+with `memset()`, so no care has to be taken to free any old contents.
+For example, in the case of a string value that may never be %NULL, the
+implementation might look like:
+
+|[&lt;!-- language="C" --&gt;
+value-&gt;data[0].v_pointer = g_strdup ("");
+]|</doc>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve">the value to initialize</doc>
+          <type name="Value" c:type="GValue*"/>
+        </parameter>
+      </parameters>
+    </callback>
+    <callback name="TypeValueLCopyFunc" c:type="GTypeValueLCopyFunc" version="2.78">
+      <doc xml:space="preserve">This function is responsible for storing the `value`
+contents into arguments passed through a variadic argument list which
+got collected into `collect_values` according to `lcopy_format`.
+
+The `n_collect_values` argument equals the string length of
+`lcopy_format`, and `collect_flags` may contain %G_VALUE_NOCOPY_CONTENTS.
+
+In contrast to #GTypeValueCollectFunc, this function is obliged to always
+properly support %G_VALUE_NOCOPY_CONTENTS.
+
+Similar to #GTypeValueCollectFunc the function may prematurely abort by
+returning a newly allocated string describing an error condition. To
+complete the string example:
+
+|[&lt;!-- language="C" --&gt;
+gchar **string_p = collect_values[0].v_pointer;
+g_return_val_if_fail (string_p != NULL,
+  g_strdup ("string location passed as NULL"));
+
+if (collect_flags &amp; G_VALUE_NOCOPY_CONTENTS)
+  *string_p = value-&gt;data[0].v_pointer;
+else
+  *string_p = g_strdup (value-&gt;data[0].v_pointer);
+]|
+
+And an illustrative version of this function for reference-counted
+types:
+
+|[&lt;!-- language="C" --&gt;
+GObject **object_p = collect_values[0].v_pointer;
+g_return_val_if_fail (object_p != NULL,
+  g_strdup ("object location passed as NULL"));
+
+if (value-&gt;data[0].v_pointer == NULL)
+  *object_p = NULL;
+else if (collect_flags &amp; G_VALUE_NOCOPY_CONTENTS) // always honour
+  *object_p = value-&gt;data[0].v_pointer;
+else
+  *object_p = g_object_ref (value-&gt;data[0].v_pointer);
+
+return NULL;
+]|</doc>
+      <return-value transfer-ownership="full" nullable="1">
+        <doc xml:space="preserve">`NULL` on success, otherwise
+  a newly allocated error string on failure</doc>
+        <type name="utf8" c:type="gchar*"/>
+      </return-value>
+      <parameters>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve">the value to lcopy</doc>
+          <type name="Value" c:type="const GValue*"/>
+        </parameter>
+        <parameter name="n_collect_values" transfer-ownership="none">
+          <doc xml:space="preserve">the number of collected values</doc>
+          <type name="guint" c:type="guint"/>
+        </parameter>
+        <parameter name="collect_values" transfer-ownership="none">
+          <doc xml:space="preserve">the collected
+  locations for storage</doc>
+          <array length="1" zero-terminated="0" c:type="GTypeCValue*">
+            <type name="TypeCValue" c:type="GTypeCValue"/>
+          </array>
+        </parameter>
+        <parameter name="collect_flags" transfer-ownership="none">
+          <doc xml:space="preserve">optional flags</doc>
+          <type name="guint" c:type="guint"/>
+        </parameter>
+      </parameters>
+    </callback>
+    <callback name="TypeValuePeekPointerFunc" c:type="GTypeValuePeekPointerFunc" version="2.78">
+      <doc xml:space="preserve">If the value contents fit into a pointer, such as objects or strings,
+return this pointer, so the caller can peek at the current contents.
+
+To extend on our above string example:
+
+|[&lt;!-- language="C" --&gt;
+return value-&gt;data[0].v_pointer;
+]|</doc>
+      <return-value transfer-ownership="none" nullable="1">
+        <doc xml:space="preserve">a pointer to the value contents</doc>
+        <type name="gpointer" c:type="gpointer"/>
+      </return-value>
+      <parameters>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve">the value to peek</doc>
+          <type name="Value" c:type="const GValue*"/>
+        </parameter>
+      </parameters>
+    </callback>
     <record name="TypeValueTable" c:type="GTypeValueTable">
       <doc xml:space="preserve">The #GTypeValueTable provides the functions required by the #GValue
 implementation, to serve as a container for values of a type.</doc>
-      <field name="value_init">
-        <callback name="value_init">
-          <return-value transfer-ownership="none">
-            <type name="none" c:type="void"/>
-          </return-value>
-          <parameters>
-            <parameter name="value" transfer-ownership="none">
-              <type name="Value" c:type="GValue*"/>
-            </parameter>
-          </parameters>
-        </callback>
+      <field name="value_init" writable="1">
+        <doc xml:space="preserve">Function to initialize a GValue</doc>
+        <type name="TypeValueInitFunc" c:type="GTypeValueInitFunc"/>
       </field>
-      <field name="value_free">
-        <callback name="value_free">
-          <return-value transfer-ownership="none">
-            <type name="none" c:type="void"/>
-          </return-value>
-          <parameters>
-            <parameter name="value" transfer-ownership="none">
-              <type name="Value" c:type="GValue*"/>
-            </parameter>
-          </parameters>
-        </callback>
+      <field name="value_free" writable="1">
+        <doc xml:space="preserve">Function to free a GValue</doc>
+        <type name="TypeValueFreeFunc" c:type="GTypeValueFreeFunc"/>
       </field>
-      <field name="value_copy">
-        <callback name="value_copy">
-          <return-value transfer-ownership="none">
-            <type name="none" c:type="void"/>
-          </return-value>
-          <parameters>
-            <parameter name="src_value" transfer-ownership="none">
-              <type name="Value" c:type="const GValue*"/>
-            </parameter>
-            <parameter name="dest_value" transfer-ownership="none">
-              <type name="Value" c:type="GValue*"/>
-            </parameter>
-          </parameters>
-        </callback>
+      <field name="value_copy" writable="1">
+        <doc xml:space="preserve">Function to copy a GValue</doc>
+        <type name="TypeValueCopyFunc" c:type="GTypeValueCopyFunc"/>
       </field>
-      <field name="value_peek_pointer">
-        <callback name="value_peek_pointer">
-          <return-value transfer-ownership="none">
-            <type name="gpointer" c:type="gpointer"/>
-          </return-value>
-          <parameters>
-            <parameter name="value" transfer-ownership="none">
-              <type name="Value" c:type="const GValue*"/>
-            </parameter>
-          </parameters>
-        </callback>
+      <field name="value_peek_pointer" writable="1">
+        <doc xml:space="preserve">Function to peek the contents of a GValue if they fit
+  into a pointer</doc>
+        <type name="TypeValuePeekPointerFunc" c:type="GTypeValuePeekPointerFunc"/>
       </field>
       <field name="collect_format" writable="1">
         <doc xml:space="preserve">A string format describing how to collect the contents of
- this value bit-by-bit. Each character in the format represents
- an argument to be collected, and the characters themselves indicate
- the type of the argument. Currently supported arguments are:
- - 'i' - Integers. passed as collect_values[].v_int.
- - 'l' - Longs. passed as collect_values[].v_long.
- - 'd' - Doubles. passed as collect_values[].v_double.
- - 'p' - Pointers. passed as collect_values[].v_pointer.
- It should be noted that for variable argument list construction,
- ANSI C promotes every type smaller than an integer to an int, and
- floats to doubles. So for collection of short int or char, 'i'
- needs to be used, and for collection of floats 'd'.</doc>
+  this value bit-by-bit. Each character in the format represents
+  an argument to be collected, and the characters themselves indicate
+  the type of the argument. Currently supported arguments are:
+   - `'i'`: Integers, passed as `collect_values[].v_int`
+   - `'l'`: Longs, passed as `collect_values[].v_long`
+   - `'d'`: Doubles, passed as `collect_values[].v_double`
+   - `'p'`: Pointers, passed as `collect_values[].v_pointer`
+  It should be noted that for variable argument list construction,
+  ANSI C promotes every type smaller than an integer to an int, and
+  floats to doubles. So for collection of short int or char, `'i'`
+  needs to be used, and for collection of floats `'d'`.</doc>
         <type name="utf8" c:type="const gchar*"/>
       </field>
-      <field name="collect_value">
-        <callback name="collect_value">
-          <return-value transfer-ownership="full">
-            <type name="utf8" c:type="gchar*"/>
-          </return-value>
-          <parameters>
-            <parameter name="value" transfer-ownership="none">
-              <type name="Value" c:type="GValue*"/>
-            </parameter>
-            <parameter name="n_collect_values" transfer-ownership="none">
-              <type name="guint" c:type="guint"/>
-            </parameter>
-            <parameter name="collect_values" transfer-ownership="none">
-              <type name="TypeCValue" c:type="GTypeCValue*"/>
-            </parameter>
-            <parameter name="collect_flags" transfer-ownership="none">
-              <type name="guint" c:type="guint"/>
-            </parameter>
-          </parameters>
-        </callback>
+      <field name="collect_value" writable="1">
+        <doc xml:space="preserve">Function to initialize a GValue from the values
+  collected from variadic arguments</doc>
+        <type name="TypeValueCollectFunc" c:type="GTypeValueCollectFunc"/>
       </field>
       <field name="lcopy_format" writable="1">
         <doc xml:space="preserve">Format description of the arguments to collect for @lcopy_value,
- analogous to @collect_format. Usually, @lcopy_format string consists
- only of 'p's to provide lcopy_value() with pointers to storage locations.</doc>
+  analogous to @collect_format. Usually, @lcopy_format string consists
+  only of `'p'`s to provide lcopy_value() with pointers to storage locations.</doc>
         <type name="utf8" c:type="const gchar*"/>
       </field>
-      <field name="lcopy_value">
-        <callback name="lcopy_value">
-          <return-value transfer-ownership="full">
-            <type name="utf8" c:type="gchar*"/>
-          </return-value>
-          <parameters>
-            <parameter name="value" transfer-ownership="none">
-              <type name="Value" c:type="const GValue*"/>
-            </parameter>
-            <parameter name="n_collect_values" transfer-ownership="none">
-              <type name="guint" c:type="guint"/>
-            </parameter>
-            <parameter name="collect_values" transfer-ownership="none">
-              <type name="TypeCValue" c:type="GTypeCValue*"/>
-            </parameter>
-            <parameter name="collect_flags" transfer-ownership="none">
-              <type name="guint" c:type="guint"/>
-            </parameter>
-          </parameters>
-        </callback>
+      <field name="lcopy_value" writable="1">
+        <doc xml:space="preserve">Function to store the contents of a value into the
+  locations collected from variadic arguments</doc>
+        <type name="TypeValueLCopyFunc" c:type="GTypeValueLCopyFunc"/>
       </field>
       <function name="peek" c:identifier="g_type_value_table_peek" introspectable="0">
         <doc xml:space="preserve">Returns the location of the #GTypeValueTable associated with @type.
@@ -11227,7 +11638,7 @@ only be accessed through the G_VALUE_TYPE() macro.</doc>
 the boxed value is duplicated and needs to be later freed with
 g_boxed_free(), e.g. like: g_boxed_free (G_VALUE_TYPE (@value),
 return_value);</doc>
-        <return-value transfer-ownership="none" nullable="1">
+        <return-value transfer-ownership="full" nullable="1">
           <doc xml:space="preserve">boxed contents of @value</doc>
           <type name="gpointer" c:type="gpointer"/>
         </return-value>
@@ -11242,7 +11653,7 @@ return_value);</doc>
         <doc xml:space="preserve">Get the contents of a %G_TYPE_OBJECT derived #GValue, increasing
 its reference count. If the contents of the #GValue are %NULL, then
 %NULL will be returned.</doc>
-        <return-value transfer-ownership="full">
+        <return-value transfer-ownership="full" nullable="1">
           <doc xml:space="preserve">object content of @value,
          should be unreferenced when no longer needed.</doc>
           <type name="Object" c:type="gpointer"/>
@@ -11271,7 +11682,7 @@ reference count.</doc>
       </method>
       <method name="dup_string" c:identifier="g_value_dup_string">
         <doc xml:space="preserve">Get a copy the contents of a %G_TYPE_STRING #GValue.</doc>
-        <return-value transfer-ownership="full">
+        <return-value transfer-ownership="full" nullable="1">
           <doc xml:space="preserve">a newly allocated copy of the string content of @value</doc>
           <type name="utf8" c:type="gchar*"/>
         </return-value>
@@ -11460,7 +11871,7 @@ Get the contents of a %G_TYPE_CHAR #GValue.</doc>
       </method>
       <method name="get_object" c:identifier="g_value_get_object">
         <doc xml:space="preserve">Get the contents of a %G_TYPE_OBJECT derived #GValue.</doc>
-        <return-value transfer-ownership="none">
+        <return-value transfer-ownership="none" nullable="1">
           <doc xml:space="preserve">object contents of @value</doc>
           <type name="Object" c:type="gpointer"/>
         </return-value>
@@ -11512,7 +11923,7 @@ Get the contents of a %G_TYPE_CHAR #GValue.</doc>
       </method>
       <method name="get_string" c:identifier="g_value_get_string">
         <doc xml:space="preserve">Get the contents of a %G_TYPE_STRING #GValue.</doc>
-        <return-value transfer-ownership="none">
+        <return-value transfer-ownership="none" nullable="1">
           <doc xml:space="preserve">string content of @value</doc>
           <type name="utf8" c:type="const gchar*"/>
         </return-value>
@@ -12215,7 +12626,7 @@ doesn&#x2019;t have to unref it any more.</doc>
             <doc xml:space="preserve">a valid #GValue of type %G_TYPE_STRING</doc>
             <type name="Value" c:type="GValue*"/>
           </instance-parameter>
-          <parameter name="v_string" transfer-ownership="none" nullable="1" allow-none="1">
+          <parameter name="v_string" transfer-ownership="full" nullable="1" allow-none="1">
             <doc xml:space="preserve">string to take ownership of</doc>
             <type name="utf8" c:type="gchar*"/>
           </parameter>
@@ -12798,7 +13209,7 @@ boxed type with name @name.
 Boxed type handling functions have to be provided to copy and free
 opaque boxed structures of this type.
 
-For the general case, it is recommended to use #G_DEFINE_BOXED_TYPE
+For the general case, it is recommended to use G_DEFINE_BOXED_TYPE()
 instead of calling g_boxed_type_register_static() directly. The macro
 will create the appropriate `*_get_type()` function for the boxed type.</doc>
       <return-value transfer-ownership="none">
@@ -13621,7 +14032,7 @@ but used automatically by GLib when specifying a %NULL marshaller.</doc>
 the last parameter.
 
 @destroy_data will be called as a finalize notifier on the #GClosure.</doc>
-      <return-value transfer-ownership="none">
+      <return-value transfer-ownership="full">
         <doc xml:space="preserve">a floating reference to a new #GCClosure</doc>
         <type name="Closure" c:type="GClosure*"/>
       </return-value>
@@ -13687,7 +14098,7 @@ after the object is is freed.</doc>
 the first parameter.
 
 @destroy_data will be called as a finalize notifier on the #GClosure.</doc>
-      <return-value transfer-ownership="none">
+      <return-value transfer-ownership="full">
         <doc xml:space="preserve">a floating reference to a new #GCClosure</doc>
         <type name="Closure" c:type="GClosure*"/>
       </return-value>
@@ -14182,7 +14593,7 @@ foo ()
   g_value_set_boxed (value, mystruct);
   // [... your code ....]
   g_value_unset (value);
-  g_value_free (value);
+  g_free (value);
 }
 ]|</doc>
     </docsection>
@@ -14223,7 +14634,21 @@ to the buffer in the structure.
 As mentioned in the [GType conventions][gtype-conventions], type names must
 be at least three characters long. There is no upper length limit. The first
 character must be a letter (a&#x2013;z or A&#x2013;Z) or an underscore (&#x2018;_&#x2019;). Subsequent
-characters can be letters, numbers or any of &#x2018;-_+&#x2019;.</doc>
+characters can be letters, numbers or any of &#x2018;-_+&#x2019;.
+
+# Runtime Debugging
+
+When `G_ENABLE_DEBUG` is defined during compilation, the GObject library
+supports an environment variable `GOBJECT_DEBUG` that can be set to a
+combination of flags to trigger debugging messages about
+object bookkeeping and signal emissions during runtime.
+
+The currently supported flags are:
+ - `objects`: Tracks all #GObject instances in a global hash table called
+   `debug_objects_ht`, and prints the still-alive objects on exit.
+ - `instance-count`: Tracks the number of instances of every #GType and makes
+   it available via the g_type_get_instance_count() function.
+ - `signals`: Currently unused.</doc>
     </docsection>
     <function name="gtype_get_type" c:identifier="g_gtype_get_type">
       <return-value transfer-ownership="none">
@@ -14232,7 +14657,7 @@ characters can be letters, numbers or any of &#x2018;-_+&#x2019;.</doc>
     </function>
     <docsection name="objects">
       <doc xml:space="preserve">GObject is the fundamental type providing the common attributes and
-methods for all object types in GTK+, Pango and other libraries
+methods for all object types in GTK, Pango and other libraries
 based on GObject.  The GObject class provides methods for object
 construction and destruction, property access methods, and signal
 support.  Signals are described in detail [here][gobject-Signals].
@@ -14340,11 +14765,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14372,11 +14797,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14401,11 +14826,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14441,11 +14866,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14481,11 +14906,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14517,11 +14942,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14552,11 +14977,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14592,11 +15017,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14624,11 +15049,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14663,11 +15088,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14702,11 +15127,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14742,11 +15167,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14793,11 +15218,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14826,11 +15251,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14853,11 +15278,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14882,11 +15307,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14921,11 +15346,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -14961,11 +15386,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -15001,11 +15426,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -15042,11 +15467,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -15076,11 +15501,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -15111,11 +15536,11 @@ See g_param_spec_internal() for details on property names.</doc>
           <doc xml:space="preserve">canonical name of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="nick" transfer-ownership="none">
+        <parameter name="nick" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">nick name for the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
-        <parameter name="blurb" transfer-ownership="none">
+        <parameter name="blurb" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve">description of the property specified</doc>
           <type name="utf8" c:type="const gchar*"/>
         </parameter>
@@ -15136,7 +15561,7 @@ See g_param_spec_internal() for details on property names.</doc>
     </function>
     <function name="param_type_register_static" c:identifier="g_param_type_register_static">
       <doc xml:space="preserve">Registers @name as the name of a new static type derived
-from #G_TYPE_PARAM.
+from %G_TYPE_PARAM.
 
 The type system uses the information contained in the #GParamSpecTypeInfo
 structure pointed to by @info to manage the #GParamSpec type and its
@@ -15193,6 +15618,25 @@ without modifications</doc>
       <doc xml:space="preserve">Checks whether @value contains the default value as specified in @pspec.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">whether @value contains the canonical default for this @pspec</doc>
+        <type name="gboolean" c:type="gboolean"/>
+      </return-value>
+      <parameters>
+        <parameter name="pspec" transfer-ownership="none">
+          <doc xml:space="preserve">a valid #GParamSpec</doc>
+          <type name="ParamSpec" c:type="GParamSpec*"/>
+        </parameter>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve">a #GValue of correct type for @pspec</doc>
+          <type name="Value" c:type="const GValue*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="param_value_is_valid" c:identifier="g_param_value_is_valid" version="2.74">
+      <doc xml:space="preserve">Return whether the contents of @value comply with the specifications
+set out by @pspec.</doc>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve">whether the contents of @value comply with the specifications
+  set out by @pspec.</doc>
         <type name="gboolean" c:type="gboolean"/>
       </return-value>
       <parameters>
@@ -15439,7 +15883,7 @@ handling is needed.</doc>
     <function name="signal_add_emission_hook" c:identifier="g_signal_add_emission_hook">
       <doc xml:space="preserve">Adds an emission hook for a signal, which will get called for any emission
 of that signal, independent of the instance. This is possible only
-for signals which don't have #G_SIGNAL_NO_HOOKS flag set.</doc>
+for signals which don't have %G_SIGNAL_NO_HOOKS flag set.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">the hook id, for later use with g_signal_remove_emission_hook().</doc>
         <type name="gulong" c:type="gulong"/>
@@ -15507,7 +15951,7 @@ g_signal_override_class_handler().</doc>
         <parameter name="..." transfer-ownership="none">
           <doc xml:space="preserve">parameters to be passed to the parent class closure, followed by a
  location for the return value. If the return type of the signal
- is #G_TYPE_NONE, the return value location can be omitted.</doc>
+ is %G_TYPE_NONE, the return value location can be omitted.</doc>
           <varargs/>
         </parameter>
       </parameters>
@@ -15554,7 +15998,10 @@ The handler will be called synchronously, after the default handler of the signa
       </parameters>
     </function-macro>
     <function name="signal_connect_closure" c:identifier="g_signal_connect_closure">
-      <doc xml:space="preserve">Connects a closure to a signal for a particular object.</doc>
+      <doc xml:space="preserve">Connects a closure to a signal for a particular object.
+
+If @closure is a floating reference (see g_closure_sink()), this function
+takes ownership of @closure.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">the handler ID (always greater than 0 for successful connections)</doc>
         <type name="gulong" c:type="gulong"/>
@@ -15580,7 +16027,10 @@ The handler will be called synchronously, after the default handler of the signa
       </parameters>
     </function>
     <function name="signal_connect_closure_by_id" c:identifier="g_signal_connect_closure_by_id">
-      <doc xml:space="preserve">Connects a closure to a signal for a particular object.</doc>
+      <doc xml:space="preserve">Connects a closure to a signal for a particular object.
+
+If @closure is a floating reference (see g_closure_sink()), this function
+takes ownership of @closure.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">the handler ID (always greater than 0 for successful connections)</doc>
         <type name="gulong" c:type="gulong"/>
@@ -15750,7 +16200,7 @@ if no handlers are connected, in contrast to g_signal_emitv().</doc>
         <parameter name="..." transfer-ownership="none">
           <doc xml:space="preserve">parameters to be passed to the signal, followed by a
  location for the return value. If the return type of the signal
- is #G_TYPE_NONE, the return value location can be omitted.</doc>
+ is %G_TYPE_NONE, the return value location can be omitted.</doc>
           <varargs/>
         </parameter>
       </parameters>
@@ -15808,7 +16258,7 @@ if no handlers are connected, in contrast to g_signal_emitv().</doc>
         <parameter name="var_args" transfer-ownership="none">
           <doc xml:space="preserve">a list of parameters to be passed to the signal, followed by a
  location for the return value. If the return type of the signal
- is #G_TYPE_NONE, the return value location can be omitted.</doc>
+ is %G_TYPE_NONE, the return value location can be omitted.</doc>
           <type name="va_list" c:type="va_list"/>
         </parameter>
       </parameters>
@@ -16008,12 +16458,18 @@ connected to a signal of @instance and is currently blocked.</doc>
     </function-macro>
     <function name="signal_handlers_block_matched" c:identifier="g_signal_handlers_block_matched">
       <doc xml:space="preserve">Blocks all handlers on an instance that match a certain selection criteria.
-The criteria mask is passed as an OR-ed combination of #GSignalMatchType
-flags, and the criteria values are passed as arguments.
-Passing at least one of the %G_SIGNAL_MATCH_CLOSURE, %G_SIGNAL_MATCH_FUNC
+
+The criteria mask is passed as a combination of #GSignalMatchType flags, and
+the criteria values are passed as arguments. A handler must match on all
+flags set in @mask to be blocked (i.e. the match is conjunctive).
+
+Passing at least one of the %G_SIGNAL_MATCH_ID, %G_SIGNAL_MATCH_CLOSURE,
+%G_SIGNAL_MATCH_FUNC
 or %G_SIGNAL_MATCH_DATA match flags is required for successful matches.
 If no handlers were found, 0 is returned, the number of blocked handlers
-otherwise.</doc>
+otherwise.
+
+Support for %G_SIGNAL_MATCH_ID was added in GLib 2.78.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">The number of handlers that matched.</doc>
         <type name="guint" c:type="guint"/>
@@ -16091,13 +16547,19 @@ and should not be used outside of the type system.</doc>
     </function-macro>
     <function name="signal_handlers_disconnect_matched" c:identifier="g_signal_handlers_disconnect_matched">
       <doc xml:space="preserve">Disconnects all handlers on an instance that match a certain
-selection criteria. The criteria mask is passed as an OR-ed
-combination of #GSignalMatchType flags, and the criteria values are
-passed as arguments.  Passing at least one of the
-%G_SIGNAL_MATCH_CLOSURE, %G_SIGNAL_MATCH_FUNC or
+selection criteria.
+
+The criteria mask is passed as a combination of #GSignalMatchType flags, and
+the criteria values are passed as arguments. A handler must match on all
+flags set in @mask to be disconnected (i.e. the match is conjunctive).
+
+Passing at least one of the %G_SIGNAL_MATCH_ID, %G_SIGNAL_MATCH_CLOSURE,
+%G_SIGNAL_MATCH_FUNC or
 %G_SIGNAL_MATCH_DATA match flags is required for successful
 matches.  If no handlers were found, 0 is returned, the number of
-disconnected handlers otherwise.</doc>
+disconnected handlers otherwise.
+
+Support for %G_SIGNAL_MATCH_ID was added in GLib 2.78.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">The number of handlers that matched.</doc>
         <type name="guint" c:type="guint"/>
@@ -16150,13 +16612,20 @@ disconnected handlers otherwise.</doc>
     </function-macro>
     <function name="signal_handlers_unblock_matched" c:identifier="g_signal_handlers_unblock_matched">
       <doc xml:space="preserve">Unblocks all handlers on an instance that match a certain selection
-criteria. The criteria mask is passed as an OR-ed combination of
-#GSignalMatchType flags, and the criteria values are passed as arguments.
-Passing at least one of the %G_SIGNAL_MATCH_CLOSURE, %G_SIGNAL_MATCH_FUNC
+criteria.
+
+The criteria mask is passed as a combination of #GSignalMatchType flags, and
+the criteria values are passed as arguments. A handler must match on all
+flags set in @mask to be unblocked (i.e. the match is conjunctive).
+
+Passing at least one of the %G_SIGNAL_MATCH_ID, %G_SIGNAL_MATCH_CLOSURE,
+%G_SIGNAL_MATCH_FUNC
 or %G_SIGNAL_MATCH_DATA match flags is required for successful matches.
 If no handlers were found, 0 is returned, the number of unblocked handlers
 otherwise. The match criteria should not apply to any handlers that are
-not currently blocked.</doc>
+not currently blocked.
+
+Support for %G_SIGNAL_MATCH_ID was added in GLib 2.78.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">The number of handlers that matched.</doc>
         <type name="guint" c:type="guint"/>
@@ -16380,7 +16849,7 @@ be used.</doc>
           <type name="SignalCMarshaller" c:type="GSignalCMarshaller"/>
         </parameter>
         <parameter name="return_type" transfer-ownership="none">
-          <doc xml:space="preserve">the type of return value, or #G_TYPE_NONE for a signal
+          <doc xml:space="preserve">the type of return value, or %G_TYPE_NONE for a signal
  without a return value.</doc>
           <type name="GType" c:type="GType"/>
         </parameter>
@@ -16403,7 +16872,7 @@ doesn't need a function pointer exposed in the class structure of
 an object definition, instead the function pointer is passed
 directly and can be overridden by derived classes with
 g_signal_override_class_closure() or
-g_signal_override_class_handler()and chained to with
+g_signal_override_class_handler() and chained to with
 g_signal_chain_from_overridden() or
 g_signal_chain_from_overridden_handler().
 
@@ -16451,7 +16920,7 @@ the marshaller for this signal.</doc>
           <type name="SignalCMarshaller" c:type="GSignalCMarshaller"/>
         </parameter>
         <parameter name="return_type" transfer-ownership="none">
-          <doc xml:space="preserve">the type of return value, or #G_TYPE_NONE for a signal
+          <doc xml:space="preserve">the type of return value, or %G_TYPE_NONE for a signal
  without a return value.</doc>
           <type name="GType" c:type="GType"/>
         </parameter>
@@ -16510,7 +16979,7 @@ the marshaller for this signal.</doc>
           <type name="SignalCMarshaller" c:type="GSignalCMarshaller"/>
         </parameter>
         <parameter name="return_type" transfer-ownership="none">
-          <doc xml:space="preserve">the type of return value, or #G_TYPE_NONE for a signal
+          <doc xml:space="preserve">the type of return value, or %G_TYPE_NONE for a signal
  without a return value.</doc>
           <type name="GType" c:type="GType"/>
         </parameter>
@@ -16571,7 +17040,7 @@ the marshaller for this signal.</doc>
           <type name="SignalCMarshaller" c:type="GSignalCMarshaller"/>
         </parameter>
         <parameter name="return_type" transfer-ownership="none">
-          <doc xml:space="preserve">the type of return value, or #G_TYPE_NONE for a signal
+          <doc xml:space="preserve">the type of return value, or %G_TYPE_NONE for a signal
     without a return value</doc>
           <type name="GType" c:type="GType"/>
         </parameter>
@@ -16784,7 +17253,7 @@ signal id for you.</doc>
       <doc xml:space="preserve">Creates a new closure which invokes the function found at the offset
 @struct_offset in the class structure of the interface or classed type
 identified by @itype.</doc>
-      <return-value transfer-ownership="none">
+      <return-value transfer-ownership="full">
         <doc xml:space="preserve">a floating reference to a new #GCClosure</doc>
         <type name="Closure" c:type="GClosure*"/>
       </return-value>
@@ -17454,8 +17923,8 @@ fundamental type identifier.</doc>
     <function name="type_get_instance_count" c:identifier="g_type_get_instance_count" version="2.44">
       <doc xml:space="preserve">Returns the number of instances allocated of the particular type;
 this is only available if GLib is built with debugging support and
-the instance_count debug flag is set (by setting the GOBJECT_DEBUG
-variable to include instance-count).</doc>
+the `instance-count` debug flag is set (by setting the `GOBJECT_DEBUG`
+variable to include `instance-count`).</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve">the number of instances allocated of the given type;
   if instance counts are not available, returns 0.</doc>
@@ -17529,7 +17998,7 @@ nothing.</doc>
 flags.  Since GLib 2.36, the type system is initialised automatically
 and this function does nothing.
 
-If you need to enable debugging features, use the GOBJECT_DEBUG
+If you need to enable debugging features, use the `GOBJECT_DEBUG`
 environment variable.</doc>
       <doc-deprecated xml:space="preserve">the type system is now initialised automatically</doc-deprecated>
       <return-value transfer-ownership="none">
@@ -17692,7 +18161,7 @@ function (like all other GType API) cannot cope with invalid type
 IDs. %G_TYPE_INVALID may be passed to this function, as may be any
 other validly registered type ID, but randomized type IDs should
 not be passed in and will most likely lead to a crash.</doc>
-      <return-value transfer-ownership="none">
+      <return-value transfer-ownership="none" nullable="1">
         <doc xml:space="preserve">static type name or %NULL</doc>
         <type name="utf8" c:type="const gchar*"/>
       </return-value>
@@ -17775,11 +18244,15 @@ in type has no parent, i.e. is a fundamental type, 0 is returned.</doc>
     </function>
     <function name="type_query" c:identifier="g_type_query">
       <doc xml:space="preserve">Queries the type system for information about a specific type.
+
 This function will fill in a user-provided structure to hold
 type-specific information. If an invalid #GType is passed in, the
 @type member of the #GTypeQuery is 0. All members filled into the
 #GTypeQuery structure should be considered constant and have to be
-left untouched.</doc>
+left untouched.
+
+Since GLib 2.78, this function allows queries on dynamic types. Previously
+it only supported static types.</doc>
       <return-value transfer-ownership="none">
         <type name="none" c:type="void"/>
       </return-value>
@@ -17802,7 +18275,7 @@ left untouched.</doc>
 instances (if not abstract).  The value of @flags determines the nature
 (e.g. abstract or not) of the type.</doc>
       <return-value transfer-ownership="none">
-        <doc xml:space="preserve">the new type identifier or #G_TYPE_INVALID if registration failed</doc>
+        <doc xml:space="preserve">the new type identifier or %G_TYPE_INVALID if registration failed</doc>
         <type name="GType" c:type="GType"/>
       </return-value>
       <parameters>

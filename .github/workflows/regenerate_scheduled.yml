@@ -10,24 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Redownload, regenerate, reformat
         id: changes
         run: |
-          sudo apt-get update > /dev/null
-          sudo apt-get -qq upgrade > /dev/null
-          sudo apt-get -qq install binutils wget tar xmlstarlet flatpak > /dev/null
+          sudo apt-get -q update
+          sudo apt-get -q upgrade
+          sudo apt-get -q install binutils wget tar xmlstarlet flatpak
           flatpak remote-add --user --if-not-exists gnome-nightly https://nightly.gnome.org/gnome-nightly.flatpakrepo 
           flatpak install org.gnome.Sdk//master -y --noninteractive
+          flatpak info org.gnome.Sdk//master
+          flatpak run --command=ls org.gnome.Sdk//master /usr/share/gir-1.0/ -lh
           flatpak run --command=python3 --filesystem=home org.gnome.Sdk//master dl.py
+          ./dl-win32.sh
           ./reformat.sh && ./fix.sh
           echo ::set-output name=pr_title::"Update GIR files ($(date +%Y-%m-%d))"
           echo ::set-output name=pr_body::"This PR was auto-generated on $(date +%Y-%m-%d). Please review and manually edit before merging."
       - name: Create PR
         id: cpr
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@v5
         with:
           commit-message: Update GIR files
           title: ${{ steps.changes.outputs.pr_title }}
